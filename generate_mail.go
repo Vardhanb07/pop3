@@ -15,11 +15,14 @@ func Generate(name, domain, pass string) {
 	}
 	mailbox := path.Join(hdir, ".pop3", domain, name)
 	if _, err := os.Open(mailbox); os.IsNotExist(err) {
+		if err := os.Mkdir(path.Join(hdir, ".pop3", domain), 0777); err != nil {
+			log.Fatal(err)
+		}
 		if _, err := os.Create(mailbox); err != nil {
 			log.Fatal(err)
 		}
 	}
-	hashfilepath := path.Join(hdir, ".pop3", "."+name+"_hash")
+	hashfilepath := path.Join(hdir, ".pop3", domain, "."+name+"_hash")
 	if _, err := os.Open(hashfilepath); os.IsNotExist(err) {
 		if _, err := os.Create(hashfilepath); err != nil {
 			log.Fatal(err)

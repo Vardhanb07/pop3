@@ -75,6 +75,7 @@ func handleCommand(session *ClientSession, cmd string, args []string) {
 
 func commandQUIT(session *ClientSession) {
 	conn := session.Conn
+	defer session.Mailbox.Mu.Unlock()
 	conn.Write([]byte("+OK POP3 server signing off\r\n"))
 }
 
@@ -142,6 +143,7 @@ func commandPASS(session *ClientSession, args []string) {
 	session.Mailbox.Mu.Lock()
 	session.Conn.Write([]byte("+OK maildrop locked and ready\r\n"))
 	session.State = TRANS
+	session.Pass = args[0]
 	session.Conn.SetDeadline(time.Now().Add(5 * time.Minute))
 }
 
