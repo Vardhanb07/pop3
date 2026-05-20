@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
 )
 
 const (
@@ -122,12 +124,10 @@ func commandUSER(session *ClientSession, args []string) {
 	// check for the file ~/.pop3/domain/name.db
 	_, err = os.Open(mailbox)
 	if os.IsNotExist(err) {
-		s := fmt.Sprintf("-ERR never heard of %s\r\n", args[0])
-		session.Conn.Write([]byte(s))
+		session.Conn.Write(fmt.Appendf([]byte{}, "-ERR never heard of %s\r\n", args[0]))
 		return
 	}
-	t := fmt.Sprintf("+OK %s is a valid mailbox\r\n", args[0])
-	session.Conn.Write([]byte(t))
+	session.Conn.Write(fmt.Appendf([]byte{}, "+OK %s is a valid mailbox\r\n", args[0]))
 	session.Mailbox.Path = path.Join(hdir, ".pop3", s[1])
 	session.Name = s[0]
 }
@@ -169,6 +169,22 @@ func commandSTAT(session *ClientSession) {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
+	dbPath := path.Join(session.Mailbox.Path, session.Name+".db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
+		return
+	}
+	rows, err := db.Query("select msg from mail where is_deleted=0")
+	mailCount := 0
+	size := 0
+	for rows.Next() {
+		msg := ""
+		rows.Scan(&msg)
+		mailCount++
+		size += len(msg)
+	}
+	session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v %v\r\n", mailCount, size))
 }
 
 func commandLIST(session *ClientSession, args []string) {
