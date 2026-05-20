@@ -8,7 +8,10 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -28,7 +31,7 @@ const (
 // GREET -> AUTH -> TRANS -> UPDATE
 //
 // consider maildrop for this project as ~/.pop3/test.com/test for test@test.com
-// the directory ~/.pop3/test.com contains test, .hash
+// the directory ~/.pop3/test.com contains test, .test_hash
 // .hash file contains hash of user and pass
 // a test user test@test.com with pass pass
 const (
@@ -39,11 +42,16 @@ const (
 )
 
 type ClientSession struct {
-	State       string
-	Conn        net.Conn
-	Name        string
-	Pass        string
-	MailBoxPath string
+	State   string
+	Conn    net.Conn
+	Name    string
+	Pass    string
+	Mailbox mailbox
+}
+
+type mailbox struct {
+	Path string
+	Mu   sync.RWMutex
 }
 
 func newClientSession(conn net.Conn) *ClientSession {
@@ -61,7 +69,7 @@ func handleCommand(session *ClientSession, cmd string, args []string) {
 	case USER:
 		commandUSER(session, args)
 	case PASS:
-		commandPASS(session)
+		commandPASS(session, args)
 	}
 }
 
@@ -90,6 +98,7 @@ func commandUSER(session *ClientSession, args []string) {
 	hdir, err := os.UserHomeDir()
 	if err != nil {
 		session.Conn.Write([]byte("-ERR mailbox read failed\r\n"))
+		return
 	}
 	mailbox := path.Join(hdir, ".pop3", s[1], s[0])
 	// check for the file ~/.pop3/domain/name
@@ -99,11 +108,16 @@ func commandUSER(session *ClientSession, args []string) {
 		session.Conn.Write([]byte(s))
 		return
 	}
-	session.MailBoxPath = mailbox
+	t := fmt.Sprintf("+OK %s is a valid mailbox\r\n", args[0])
+	session.Conn.Write([]byte(t))
+	session.Mailbox.Path = path.Join(hdir, ".pop3", s[1])
 	session.Name = s[0]
 }
 
-func commandPASS(session *ClientSession) {
+// PASS pass
+// here password with spaces is not handled
+// check the password with the hash ~/.pop3/test.com/.test_hash considering test@test.com
+func commandPASS(session *ClientSession, args []string) {
 	if session.State != AUTH {
 		session.Conn.Write([]byte("-ERR command not available\r\n"))
 		return
@@ -112,6 +126,23 @@ func commandPASS(session *ClientSession) {
 		session.Conn.Write([]byte("-ERR invalid password\r\n"))
 		return
 	}
+	if len(args) < 1 {
+		session.Conn.Write([]byte("-ERR argument incomplete\r\n"))
+		return
+	}
+	path := path.Join(session.Mailbox.Path, "."+session.Name+"_hash")
+	// check for the file ~/.pop3/test.com/.test_hash
+	hashfile, _ := os.Open(path)
+	hash := make([]byte, 1024)
+	n, _ := hashfile.Read(hash)
+	if err := bcrypt.CompareHashAndPassword(hash[:n], []byte(args[0])); err != nil {
+		session.Conn.Write([]byte("-ERR invalid password\r\n"))
+		return
+	}
+	session.Mailbox.Mu.Lock()
+	session.Conn.Write([]byte("+OK maildrop locked and ready\r\n"))
+	session.State = TRANS
+	session.Conn.SetDeadline(time.Now().Add(5 * time.Minute))
 }
 
 func handleConn(session *ClientSession) {
@@ -148,6 +179,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	Generate("test", "test.com", "test")
 	fmt.Println("server listening at port 5000")
 	for {
 		conn, err := ln.Accept()
