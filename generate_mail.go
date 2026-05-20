@@ -13,9 +13,9 @@ func Generate(name, domain, pass string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mailbox := path.Join(hdir, ".pop3", domain, name)
+	mailbox := path.Join(hdir, ".pop3", domain, name+".db")
 	if _, err := os.Open(mailbox); os.IsNotExist(err) {
-		if err := os.Mkdir(path.Join(hdir, ".pop3", domain), 0777); err != nil {
+		if err := os.Mkdir(path.Join(hdir, ".pop3", domain), 0777); os.IsNotExist(err) {
 			log.Fatal(err)
 		}
 		if _, err := os.Create(mailbox); err != nil {
@@ -28,7 +28,7 @@ func Generate(name, domain, pass string) {
 			log.Fatal(err)
 		}
 	}
-	hashfile, err := os.Open(hashfilepath)
+	hashfile, err := os.OpenFile(hashfilepath, os.O_RDWR, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -36,5 +36,7 @@ func Generate(name, domain, pass string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	hashfile.Write(hash)
+	if _, err := hashfile.Write(hash); err != nil {
+		log.Fatal(err)
+	}
 }
