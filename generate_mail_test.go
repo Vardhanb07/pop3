@@ -1,11 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"os"
 	"path"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
 )
 
 func TestGenerate(t *testing.T) {
@@ -25,5 +27,12 @@ func TestGenerate(t *testing.T) {
 	n, _ := hashfile.Read(hash)
 	if bcrypt.CompareHashAndPassword(hash[:n], []byte(password)) != nil {
 		t.Errorf("Greeting(%v, %v, %v) should create .%v_hash file which contains a hash", name, domain, password, name)
+	}
+	db, _ := sql.Open("sqlite", mailbox)
+	rows, _ := db.Query("select * from mail limit 1")
+	dbCols, _ := rows.Columns()
+	actualCols := []string{"ID", "MSG", "IS_DELETED"}
+	if len(dbCols) != len(actualCols) {
+		t.Errorf("Greeting(%v, %v, %v) should create a table with cols %v but created %v", name, domain, password, actualCols, dbCols)
 	}
 }

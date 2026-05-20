@@ -1,11 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"os"
 	"path"
 
 	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
 )
 
 func Generate(name, domain, pass string) {
@@ -32,11 +34,26 @@ func Generate(name, domain, pass string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer hashfile.Close()
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
 		log.Fatal(err)
 	}
 	if _, err := hashfile.Write(hash); err != nil {
+		log.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", mailbox)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("drop table if exists mail"); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := db.Exec("create table mail (id integer primary key autoincrement, msg text not null , is_deleted boolean default false)"); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := db.Exec("insert into mail ('msg') values ('test mail')"); err != nil {
 		log.Fatal(err)
 	}
 }

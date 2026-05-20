@@ -30,7 +30,7 @@ const (
 
 // GREET -> AUTH -> TRANS -> UPDATE
 //
-// consider maildrop for this project as ~/.pop3/test.com/test for test@test.com
+// consider maildrop for this project as ~/.pop3/test.com/test.db for test@test.com
 // the directory ~/.pop3/test.com contains test, .test_hash
 // .hash file contains hash of user and pass
 // a test user test@test.com with pass pass
@@ -70,20 +70,37 @@ func handleCommand(session *ClientSession, cmd string, args []string) {
 		commandUSER(session, args)
 	case PASS:
 		commandPASS(session, args)
+	case STAT:
+		commandSTAT(session)
+	case LIST:
+		commandLIST(session, args)
+	case RETR:
+		commandRETR(session, args)
+	case DELE:
+		commandDELE(session, args)
+	case NOOP:
+		commandNOOP(session)
+	case RSET:
+		commandRSET(session)
+	case TOP:
+		commandTOP(session, args)
+	case UIDL:
+		commandUIDL(session, args)
+	default:
+		session.Conn.Write([]byte("-ERR no such command available\r\n"))
 	}
 }
 
 func commandQUIT(session *ClientSession) {
 	conn := session.Conn
-	defer session.Mailbox.Mu.Unlock()
 	conn.Write([]byte("+OK POP3 server signing off\r\n"))
 }
 
 // USER username@domain
-// mailbox -> /.pop3/domain/username
+// mailbox -> /.pop3/domain/username.db
 func commandUSER(session *ClientSession, args []string) {
 	if session.State != AUTH {
-		session.Conn.Write([]byte("-ERR command not available\r\n"))
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
 	if len(args) == 0 {
@@ -101,8 +118,8 @@ func commandUSER(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR mailbox read failed\r\n"))
 		return
 	}
-	mailbox := path.Join(hdir, ".pop3", s[1], s[0])
-	// check for the file ~/.pop3/domain/name
+	mailbox := path.Join(hdir, ".pop3", s[1], s[0]+".db")
+	// check for the file ~/.pop3/domain/name.db
 	_, err = os.Open(mailbox)
 	if os.IsNotExist(err) {
 		s := fmt.Sprintf("-ERR never heard of %s\r\n", args[0])
@@ -120,7 +137,7 @@ func commandUSER(session *ClientSession, args []string) {
 // check the password with the hash ~/.pop3/test.com/.test_hash considering test@test.com
 func commandPASS(session *ClientSession, args []string) {
 	if session.State != AUTH {
-		session.Conn.Write([]byte("-ERR command not available\r\n"))
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
 	if len(session.Name) == 0 {
@@ -145,6 +162,61 @@ func commandPASS(session *ClientSession, args []string) {
 	session.State = TRANS
 	session.Pass = args[0]
 	session.Conn.SetDeadline(time.Now().Add(5 * time.Minute))
+}
+
+func commandSTAT(session *ClientSession) {
+	if session.State != TRANS && session.State != UPDATE {
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+		return
+	}
+}
+
+func commandLIST(session *ClientSession, args []string) {
+	if session.State != TRANS && session.State != UPDATE {
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+		return
+	}
+}
+
+func commandRETR(session *ClientSession, args []string) {
+	if session.State != TRANS && session.State != UPDATE {
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+		return
+	}
+}
+
+func commandDELE(session *ClientSession, args []string) {
+	if session.State != TRANS && session.State != UPDATE {
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+	}
+}
+
+func commandNOOP(session *ClientSession) {
+	if session.State != TRANS && session.State != UPDATE {
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+		return
+	}
+}
+
+func commandRSET(session *ClientSession) {
+	if session.State != TRANS && session.State != UPDATE {
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+		return
+	}
+}
+
+func commandTOP(session *ClientSession, args []string) {
+	if session.State != TRANS && session.State != UPDATE {
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+		return
+	}
+}
+
+func commandUIDL(session *ClientSession, args []string) {
+	if session.State != TRANS && session.State != UPDATE {
+		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+		return
+	}
 }
 
 func handleConn(session *ClientSession) {
