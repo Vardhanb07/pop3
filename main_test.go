@@ -100,6 +100,11 @@ func TestPop3Server(t *testing.T) {
 			in:   "rset\r\n",
 			out:  "+OK\r\n",
 		},
+		{
+			name: "QUIT",
+			in:   "quit\r\n",
+			out:  "+OK POP3 server signing off\r\n",
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -25,8 +25,6 @@ const (
 	DELE string = "DELE"
 	NOOP string = "NOOP"
 	RSET string = "RSET"
-	TOP  string = "TOP"
-	UIDL string = "UIDL"
 	USER string = "USER"
 	PASS string = "PASS"
 )
@@ -85,18 +83,26 @@ func handleCommand(session *ClientSession, cmd string, args []string) {
 		commandNOOP(session)
 	case RSET:
 		commandRSET(session)
-	case TOP:
-		commandTOP(session, args)
-	case UIDL:
-		commandUIDL(session, args)
 	default:
 		session.Conn.Write([]byte("-ERR no such command available\r\n"))
 	}
 }
 
 func commandQUIT(session *ClientSession) {
-	conn := session.Conn
-	conn.Write([]byte("+OK POP3 server signing off\r\n"))
+	if session.State == UPDATE {
+		dbPath := path.Join(session.Mailbox.Path, session.Name+".db")
+		db, err := sql.Open("sqlite", dbPath)
+		if err != nil {
+			session.Conn.Write([]byte("-ERR database connection failed\r\n"))
+			return
+		}
+		_, err = db.Query("delete from mail where is_deleted=1")
+		if err != nil {
+			session.Conn.Write([]byte("-ERR database query failed\r\n"))
+			return
+		}
+	}
+	session.Conn.Write([]byte("+OK POP3 server signing off\r\n"))
 }
 
 // USER username@domain
@@ -367,20 +373,6 @@ func commandRSET(session *ClientSession) {
 	}
 	session.Conn.Write([]byte("+OK\r\n"))
 	session.State = UPDATE
-}
-
-func commandTOP(session *ClientSession, args []string) {
-	if session.State != TRANS && session.State != UPDATE {
-		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
-		return
-	}
-}
-
-func commandUIDL(session *ClientSession, args []string) {
-	if session.State != TRANS && session.State != UPDATE {
-		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
-		return
-	}
 }
 
 func handleConn(session *ClientSession) {
