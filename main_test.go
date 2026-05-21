@@ -90,6 +90,16 @@ func TestPop3Server(t *testing.T) {
 			in:   "dele 1\r\n",
 			out:  "+OK message 1 deleted\r\n",
 		},
+		{
+			name: "NOOP",
+			in:   "noop\r\n",
+			out:  "+OK\r\n",
+		},
+		{
+			name: "RSET",
+			in:   "rset\r\n",
+			out:  "+OK\r\n",
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
