@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -164,6 +165,7 @@ func commandPASS(session *ClientSession, args []string) {
 	session.Conn.SetDeadline(time.Now().Add(5 * time.Minute))
 }
 
+// msgs marked as deleted are not included
 func commandSTAT(session *ClientSession) {
 	if session.State != TRANS && session.State != UPDATE {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
@@ -175,22 +177,64 @@ func commandSTAT(session *ClientSession) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select msg from mail where is_deleted=0")
+	rows, err := db.Query("select length(msg) from mail where is_deleted=0")
+	if err != nil {
+		session.Conn.Write([]byte("-ERR database query failed\r\n"))
+		return
+	}
 	mailCount := 0
 	size := 0
 	for rows.Next() {
-		msg := ""
-		rows.Scan(&msg)
+		l := 0
+		rows.Scan(&l)
 		mailCount++
-		size += len(msg)
+		size += l
 	}
 	session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v %v\r\n", mailCount, size))
 }
 
+// msgs marked as deleted are not listed
 func commandLIST(session *ClientSession, args []string) {
 	if session.State != TRANS && session.State != UPDATE {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
+	}
+	dbPath := path.Join(session.Mailbox.Path, session.Name+".db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
+		return
+	}
+	rows, err := db.Query("select id, length(msg) from mail where is_deleted=0")
+	if err != nil {
+		session.Conn.Write([]byte("-ERR database query failed\r\n"))
+		return
+	}
+	size := 0
+	msgs := []int{}
+	for rows.Next() {
+		id, l := 0, 0
+		rows.Scan(&id, &l)
+		msgs = append(msgs, l)
+		size += l
+	}
+	if len(args) == 0 {
+		session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v messages (%v octets)\r\n", len(msgs), size))
+		for i, v := range msgs {
+			session.Conn.Write(fmt.Appendf([]byte{}, "%v %v\r\n", i+1, v))
+		}
+	} else {
+		id, err := strconv.Atoi(args[0])
+		if err != nil {
+			session.Conn.Write([]byte("-ERR LIST expects a number\r\n"))
+			return
+		}
+		id -= 1
+		if len(msgs) <= id {
+			session.Conn.Write([]byte("-ERR no such message\r\n"))
+			return
+		}
+		session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v %v\r\n", id+1, msgs[id]))
 	}
 }
 
