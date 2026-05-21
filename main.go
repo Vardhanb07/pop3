@@ -205,23 +205,34 @@ func commandLIST(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select id, length(msg) from mail where is_deleted=0")
+	rows, err := db.Query("select id, length(msg), is_deleted from mail")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
 	}
 	size := 0
-	msgs := []int{}
+	type msg struct {
+		id        int
+		size      int
+		isDeleted int
+	}
+	msgs := []msg{}
+	nonDeletedCount := 0
 	for rows.Next() {
-		id, l := 0, 0
-		rows.Scan(&id, &l)
-		msgs = append(msgs, l)
-		size += l
+		m := msg{}
+		rows.Scan(&m.id, &m.size, &m.isDeleted)
+		msgs = append(msgs, m)
+		size += m.size
+		if m.isDeleted == 0 {
+			nonDeletedCount++
+		}
 	}
 	if len(args) == 0 {
-		session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v messages (%v octets)\r\n", len(msgs), size))
-		for i, v := range msgs {
-			session.Conn.Write(fmt.Appendf([]byte{}, "%v %v\r\n", i+1, v))
+		session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v messages (%v octets)\r\n", nonDeletedCount, size))
+		for i := 0; i < len(msgs); i++ {
+			if msgs[i].isDeleted == 0 {
+				session.Conn.Write(fmt.Appendf([]byte{}, "%v %v\r\n", msgs[i].id, msgs[i].size))
+			}
 		}
 		session.Conn.Write([]byte(".\r\n"))
 	} else {
@@ -230,12 +241,13 @@ func commandLIST(session *ClientSession, args []string) {
 			session.Conn.Write([]byte("-ERR LIST expects a number\r\n"))
 			return
 		}
-		id -= 1
-		if len(msgs) <= id {
-			session.Conn.Write([]byte("-ERR no such message\r\n"))
-			return
+		for i := 0; i < len(msgs); i++ {
+			if msgs[i].id == id && msgs[i].isDeleted == 0 {
+				session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v %v\r\n", id, msgs[i].size))
+				return
+			}
 		}
-		session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v %v\r\n", id+1, msgs[id]))
+		session.Conn.Write([]byte("-ERR no such message\r\n"))
 	}
 }
 
