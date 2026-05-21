@@ -341,6 +341,7 @@ func commandNOOP(session *ClientSession) {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
+	session.Conn.Write([]byte("+OK\r\n"))
 }
 
 func commandRSET(session *ClientSession) {
