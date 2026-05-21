@@ -205,34 +205,27 @@ func commandLIST(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select id, length(msg), is_deleted from mail")
+	rows, err := db.Query("select id, length(msg) from mail is_deleted=0")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
 	}
 	size := 0
 	type msg struct {
-		id        int
-		size      int
-		isDeleted int
+		id   int
+		size int
 	}
 	msgs := []msg{}
-	nonDeletedCount := 0
 	for rows.Next() {
 		m := msg{}
-		rows.Scan(&m.id, &m.size, &m.isDeleted)
+		rows.Scan(&m.id, &m.size)
 		msgs = append(msgs, m)
 		size += m.size
-		if m.isDeleted == 0 {
-			nonDeletedCount++
-		}
 	}
 	if len(args) == 0 {
-		session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v messages (%v octets)\r\n", nonDeletedCount, size))
+		session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v messages (%v octets)\r\n", len(msgs), size))
 		for i := 0; i < len(msgs); i++ {
-			if msgs[i].isDeleted == 0 {
-				session.Conn.Write(fmt.Appendf([]byte{}, "%v %v\r\n", msgs[i].id, msgs[i].size))
-			}
+			session.Conn.Write(fmt.Appendf([]byte{}, "%v %v\r\n", msgs[i].id, msgs[i].size))
 		}
 		session.Conn.Write([]byte(".\r\n"))
 	} else {
@@ -242,7 +235,7 @@ func commandLIST(session *ClientSession, args []string) {
 			return
 		}
 		for i := 0; i < len(msgs); i++ {
-			if msgs[i].id == id && msgs[i].isDeleted == 0 {
+			if msgs[i].id == id {
 				session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v %v\r\n", id, msgs[i].size))
 				return
 			}
@@ -266,12 +259,13 @@ func commandRETR(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select msg, length(msg) from mail where is_deleted=0")
+	rows, err := db.Query("select id, msg, length(msg) from mail where is_deleted=0")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
 	}
 	type msg struct {
+		id   int
 		text string
 		size int
 	}
