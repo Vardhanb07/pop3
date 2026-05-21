@@ -38,10 +38,9 @@ const (
 // .hash file contains hash of user and pass
 // a test user test@test.com with pass pass
 const (
-	GREET  string = "GREET"
-	AUTH   string = "AUTH"
-	TRANS  string = "TRANS"
-	UPDATE string = "UPDATE"
+	GREET string = "GREET"
+	AUTH  string = "AUTH"
+	TRANS string = "TRANS"
 )
 
 type ClientSession struct {
@@ -167,7 +166,7 @@ func commandPASS(session *ClientSession, args []string) {
 
 // msgs marked as deleted are not included
 func commandSTAT(session *ClientSession) {
-	if session.State != TRANS && session.State != UPDATE {
+	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
@@ -177,7 +176,7 @@ func commandSTAT(session *ClientSession) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select length(msg) from mail where is_deleted=0")
+	rows, err := db.Query("select length(msg) from mail")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
@@ -195,7 +194,7 @@ func commandSTAT(session *ClientSession) {
 
 // msgs marked as deleted are not listed
 func commandLIST(session *ClientSession, args []string) {
-	if session.State != TRANS && session.State != UPDATE {
+	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
@@ -205,7 +204,7 @@ func commandLIST(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select id, length(msg) from mail where is_deleted=0")
+	rows, err := db.Query("select id, length(msg) from mail")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
@@ -245,7 +244,7 @@ func commandLIST(session *ClientSession, args []string) {
 }
 
 func commandRETR(session *ClientSession, args []string) {
-	if session.State != TRANS && session.State != UPDATE {
+	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
@@ -259,7 +258,7 @@ func commandRETR(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select id, msg, length(msg) from mail where is_deleted=0")
+	rows, err := db.Query("select id, msg, length(msg) from mail")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
@@ -292,34 +291,74 @@ func commandRETR(session *ClientSession, args []string) {
 }
 
 func commandDELE(session *ClientSession, args []string) {
-	if session.State != TRANS && session.State != UPDATE {
+	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
+		return
 	}
+	if len(args) < 1 {
+		session.Conn.Write([]byte("-ERR arguments incomplete\r\n"))
+		return
+	}
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		session.Conn.Write([]byte("-ERR RETR expects a number\r\n"))
+		return
+	}
+	dbPath := path.Join(session.Mailbox.Path, session.Name+".db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
+		return
+	}
+	rows, err := db.Query("select id from mail")
+	if err != nil {
+		session.Conn.Write([]byte("-ERR database query failed\r\n"))
+		return
+	}
+	type msg struct {
+		id int
+	}
+	msgs := []msg{}
+	for rows.Next() {
+		m := msg{}
+		rows.Scan(&m.id)
+		msgs = append(msgs, m)
+	}
+	for i := 0; i < len(msgs); i++ {
+		if msgs[i].id == id {
+			session.Conn.Write(fmt.Appendf([]byte{}, "+OK message %v deleted\r\n", msgs[i].id))
+			if _, err := db.Exec(fmt.Sprintf("delete from mail where id=%v", msgs[i].id)); err != nil {
+				session.Conn.Write([]byte("-ERR delete failed\r\n"))
+			}
+			return
+		}
+	}
+	session.Conn.Write([]byte("-ERR no such message\r\n"))
 }
 
 func commandNOOP(session *ClientSession) {
-	if session.State != TRANS && session.State != UPDATE {
+	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
 }
 
 func commandRSET(session *ClientSession) {
-	if session.State != TRANS && session.State != UPDATE {
+	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
 }
 
 func commandTOP(session *ClientSession, args []string) {
-	if session.State != TRANS && session.State != UPDATE {
+	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
 }
 
 func commandUIDL(session *ClientSession, args []string) {
-	if session.State != TRANS && session.State != UPDATE {
+	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
