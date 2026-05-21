@@ -176,7 +176,7 @@ func commandSTAT(session *ClientSession) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select length(msg) from mail")
+	rows, err := db.Query("select length(msg) from mail where is_deleted=0")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
@@ -204,7 +204,7 @@ func commandLIST(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select id, length(msg) from mail")
+	rows, err := db.Query("select id, length(msg) from mail where is_deleted=0")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
@@ -258,7 +258,7 @@ func commandRETR(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select id, msg, length(msg) from mail")
+	rows, err := db.Query("select id, msg, length(msg) from mail where is_deleted=0")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
@@ -290,6 +290,7 @@ func commandRETR(session *ClientSession, args []string) {
 	session.Conn.Write([]byte("-ERR no such message\r\n"))
 }
 
+// set is_deleted=1 for sake of RSET command as it changes is_deleted=0
 func commandDELE(session *ClientSession, args []string) {
 	if session.State != TRANS {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
@@ -327,7 +328,7 @@ func commandDELE(session *ClientSession, args []string) {
 	for i := 0; i < len(msgs); i++ {
 		if msgs[i].id == id {
 			session.Conn.Write(fmt.Appendf([]byte{}, "+OK message %v deleted\r\n", msgs[i].id))
-			if _, err := db.Exec(fmt.Sprintf("delete from mail where id=%v", msgs[i].id)); err != nil {
+			if _, err := db.Exec(fmt.Sprintf("update mail set is_deleted=1 where id=%v", msgs[i].id)); err != nil {
 				session.Conn.Write([]byte("-ERR delete failed\r\n"))
 			}
 			return
@@ -394,7 +395,7 @@ func handleConn(session *ClientSession) {
 	}
 }
 
-func main() {
+func StartServer() {
 	ln, err := net.Listen("tcp", "0.0.0.0:5000")
 	if err != nil {
 		log.Fatal(err)
@@ -410,4 +411,8 @@ func main() {
 		session := newClientSession(conn)
 		go handleConn(session)
 	}
+}
+
+func main() {
+	StartServer()
 }

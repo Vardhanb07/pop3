@@ -50,7 +50,7 @@ func Generate(name, domain, pass string) {
 	if _, err := db.Exec("drop table if exists mail"); err != nil {
 		log.Fatal(err)
 	}
-	if _, err := db.Exec("create table mail (id integer primary key autoincrement, msg text not null)"); err != nil {
+	if _, err := db.Exec("create table mail (id integer primary key autoincrement, msg text not null, is_deleted boolean default false)"); err != nil {
 		log.Fatal(err)
 	}
 	if _, err := db.Exec("insert into mail ('msg') values ('test mail')"); err != nil {
