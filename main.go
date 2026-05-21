@@ -205,7 +205,7 @@ func commandLIST(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
 		return
 	}
-	rows, err := db.Query("select id, length(msg) from mail is_deleted=0")
+	rows, err := db.Query("select id, length(msg) from mail where is_deleted=0")
 	if err != nil {
 		session.Conn.Write([]byte("-ERR database query failed\r\n"))
 		return
@@ -271,26 +271,24 @@ func commandRETR(session *ClientSession, args []string) {
 	}
 	msgs := []msg{}
 	for rows.Next() {
-		text, size := "", 0
-		rows.Scan(&text, &size)
-		msgs = append(msgs, msg{
-			text: text,
-			size: size,
-		})
+		m := msg{}
+		rows.Scan(&m.id, &m.text, &m.size)
+		msgs = append(msgs, m)
 	}
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
 		session.Conn.Write([]byte("-ERR RETR expects a number\r\n"))
 		return
 	}
-	id -= 1
-	if len(msgs) <= id {
-		session.Conn.Write([]byte("-ERR no such message\r\n"))
-		return
+	for i := 0; i < len(msgs); i++ {
+		if msgs[i].id == id {
+			session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v octets\r\n", msgs[i].size))
+			session.Conn.Write(fmt.Appendf([]byte{}, "%s\r\n", msgs[i].text))
+			session.Conn.Write([]byte(".\r\n"))
+			return
+		}
 	}
-	session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v octets\r\n", msgs[id].size))
-	session.Conn.Write(fmt.Appendf([]byte{}, "%s\r\n", msgs[id].text))
-	session.Conn.Write([]byte(".\r\n"))
+	session.Conn.Write([]byte("-ERR no such message\r\n"))
 }
 
 func commandDELE(session *ClientSession, args []string) {
