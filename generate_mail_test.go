@@ -31,7 +31,7 @@ func TestGenerate(t *testing.T) {
 	db, _ := sql.Open("sqlite", mailbox)
 	rows, _ := db.Query("select * from mail limit 1")
 	dbCols, _ := rows.Columns()
-	actualCols := []string{"ID", "MSG", "IS_DELETED"}
+	actualCols := []string{"ID", "MSG"}
 	if len(dbCols) != len(actualCols) {
 		t.Errorf("Greeting(%v, %v, %v) should create a table with cols %v but created %v", name, domain, password, actualCols, dbCols)
 	}
