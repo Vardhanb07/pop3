@@ -223,6 +223,7 @@ func commandLIST(session *ClientSession, args []string) {
 		for i, v := range msgs {
 			session.Conn.Write(fmt.Appendf([]byte{}, "%v %v\r\n", i+1, v))
 		}
+		session.Conn.Write([]byte(".\r\n"))
 	} else {
 		id, err := strconv.Atoi(args[0])
 		if err != nil {
@@ -243,6 +244,47 @@ func commandRETR(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR action not premitted\r\n"))
 		return
 	}
+	if len(args) < 1 {
+		session.Conn.Write([]byte("-ERR arguments incomplete\r\n"))
+		return
+	}
+	dbPath := path.Join(session.Mailbox.Path, session.Name+".db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		session.Conn.Write([]byte("-ERR database connection failed\r\n"))
+		return
+	}
+	rows, err := db.Query("select msg, length(msg) from mail where is_deleted=0")
+	if err != nil {
+		session.Conn.Write([]byte("-ERR database query failed\r\n"))
+		return
+	}
+	type msg struct {
+		text string
+		size int
+	}
+	msgs := []msg{}
+	for rows.Next() {
+		text, size := "", 0
+		rows.Scan(&text, &size)
+		msgs = append(msgs, msg{
+			text: text,
+			size: size,
+		})
+	}
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		session.Conn.Write([]byte("-ERR RETR expects a number\r\n"))
+		return
+	}
+	id -= 1
+	if len(msgs) <= id {
+		session.Conn.Write([]byte("-ERR no such message\r\n"))
+		return
+	}
+	session.Conn.Write(fmt.Appendf([]byte{}, "+OK %v octets\r\n", msgs[id].size))
+	session.Conn.Write(fmt.Appendf([]byte{}, "%s\r\n", msgs[id].text))
+	session.Conn.Write([]byte(".\r\n"))
 }
 
 func commandDELE(session *ClientSession, args []string) {
