@@ -1,15 +1,34 @@
 # pop3
 
-implementation of pop3 server from [rfc-1938](https://www.ietf.org/rfc/rfc1939.txt)
+A minimal POP3 server implementation based on RFC 1939.
 
-## setup
+## Setup
 
-start the server by runing
+1. Ensure Go is installed.
+2. Start the server:
+
 ```
 go run .
 ```
-to test the server 
+
+The server listens on port 5000 by default.
+
+## Test
+
+Open another terminal and connect using netcat:
+
 ```
 nc -C localhost 5000
 ```
-you can change port number if you want in main.go file
+
+You should see the POP3 greeting. Then try simple commands:
+
+```
+USER test@test.com
+PASS test
+STAT
+LIST
+QUIT
+```
+
+If you want a different port, update the listener in main.go.
