@@ -22,6 +22,10 @@ func TestGenerate(t *testing.T) {
 	if _, err := os.Open(hashfilepath); err != nil {
 		t.Errorf("Greeting(%v, %v, %v) should create .%v_hash", name, domain, password, name)
 	}
+	lockfilepath := path.Join(hdir, ".pop3", domain, name+".lock")
+	if _, err := os.Open(lockfilepath); err != nil {
+		t.Errorf("Greeting(%v, %v, %v) should create %v.lock", name, domain, password, name)
+	}
 	hashfile, _ := os.Open(hashfilepath)
 	hash := make([]byte, 1024)
 	n, _ := hashfile.Read(hash)

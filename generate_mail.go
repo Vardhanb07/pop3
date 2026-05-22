@@ -10,6 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// this functions creates the files .test_hash, test.db, test.lock in the dir ~/.pop3/test.com/ for the mail test@test.com
 func Generate(name, domain, pass string) {
 	hdir, err := os.UserHomeDir()
 	if err != nil {
@@ -35,6 +36,12 @@ func Generate(name, domain, pass string) {
 		log.Fatal(err)
 	}
 	defer hashfile.Close()
+	lockfilepath := path.Join(hdir, ".pop3", domain, name+".lock")
+	if _, err := os.Open(lockfilepath); os.IsNotExist(err) {
+		if _, err := os.Create(lockfilepath); err != nil {
+			log.Fatal(err)
+		}
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
 	if err != nil {
 		log.Fatal(err)
