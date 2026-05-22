@@ -10,10 +10,10 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/sys/unix"
 	_ "modernc.org/sqlite"
 )
 
@@ -32,7 +32,7 @@ const (
 // GREET -> AUTH -> TRANS -> UPDATE
 //
 // consider maildrop for this project as ~/.pop3/test.com/test.db for test@test.com
-// the directory ~/.pop3/test.com contains test, .test_hash
+// the directory ~/.pop3/test.com contains test, .test_hash, test.lock
 // .hash file contains hash of user and pass
 // a test user test@test.com with pass pass
 const (
@@ -51,8 +51,8 @@ type ClientSession struct {
 }
 
 type mailbox struct {
-	Path string
-	Mu   sync.RWMutex
+	Path     string
+	LockFile *os.File
 }
 
 func newClientSession(conn net.Conn) *ClientSession {
@@ -60,6 +60,25 @@ func newClientSession(conn net.Conn) *ClientSession {
 		State: GREET,
 		Conn:  conn,
 	}
+}
+
+// sys lock the test.lock file
+// here lock is exclusive and non blocking
+func (session *ClientSession) lockDB() (*os.File, error) {
+	lockfilepath := path.Join(session.Mailbox.Path, session.Name+".lock")
+	lockfile, err := os.Open(lockfilepath)
+	if err != nil {
+		return nil, err
+	}
+	if err := unix.Flock(int(lockfile.Fd()), unix.LOCK_NB|unix.LOCK_EX); err != nil {
+		return nil, err
+	}
+	return lockfile, nil
+}
+
+// sys unlock the test.lock file
+func (session *ClientSession) unlockDB() error {
+	return unix.Flock(int(session.Mailbox.LockFile.Fd()), unix.LOCK_UN)
 }
 
 func handleCommand(session *ClientSession, cmd string, args []string) {
@@ -164,10 +183,15 @@ func commandPASS(session *ClientSession, args []string) {
 		session.Conn.Write([]byte("-ERR invalid password\r\n"))
 		return
 	}
-	session.Mailbox.Mu.Lock()
+	lockfile, err := session.lockDB()
+	if err == unix.EWOULDBLOCK {
+		session.Conn.Write([]byte("-ERR unable to lock maildrop\r\n"))
+		return
+	}
 	session.Conn.Write([]byte("+OK maildrop locked and ready\r\n"))
 	session.State = TRANS
 	session.Pass = args[0]
+	session.Mailbox.LockFile = lockfile
 	session.Conn.SetDeadline(time.Now().Add(5 * time.Minute))
 }
 
@@ -383,6 +407,7 @@ func handleConn(session *ClientSession) {
 	session.State = AUTH
 	packets := []byte{}
 	tmp := make([]byte, 1024)
+	defer session.unlockDB()
 	for {
 		n, err := conn.Read(tmp)
 		if err != nil {
